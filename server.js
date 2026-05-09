@@ -20,6 +20,23 @@ app.get('/', (req, res) => {
   res.send('NutriScan AI Backend is Running');
 });
 
+// Diagnostic check
+app.get('/api/check', (req, res) => {
+  res.json({
+    status: 'ok',
+    hasKey: !!process.env.GEMINI_API_KEY,
+    keyPrefix: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 8) + '...' : 'NOT SET',
+    timestamp: Date.now()
+  });
+});
+
+// Global Error Handler (Express 5 compatible)
+app.use((err, req, res, next) => {
+  console.error('Unhandled Error:', err);
+  res.status(500).json({ message: 'Internal Server Error', error: err.message });
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? 'SET (' + process.env.GEMINI_API_KEY.substring(0, 8) + '...)' : 'NOT SET'}`);
 });

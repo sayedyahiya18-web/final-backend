@@ -11,19 +11,19 @@ router.post('/', async (req, res) => {
   const { query, product, profile } = req.body;
 
   if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ message: 'Gemini API key not configured' });
+    return res.status(500).json({ message: 'Gemini API key not configured on server' });
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `
       You are NutriScan AI assistant. Your goal is to provide simple, actionable health advice based on food products.
       
-      User Profile: ${JSON.stringify(profile)}
-      Product: ${product ? product.product_name : 'No product scanned yet'}
-      Ingredients: ${product ? product.ingredients : 'N/A'}
-      Nutrition (per 100g): ${product ? JSON.stringify(product.nutriments) : 'N/A'}
+      User Profile: ${JSON.stringify(profile || {})}
+      Product: ${product ? (product.product_name || product.name || 'Unknown') : 'No product scanned yet'}
+      Ingredients: ${product ? (product.ingredients || product.ingredients_text || 'N/A') : 'N/A'}
+      Nutrition (per 100g): ${product ? JSON.stringify(product.nutriments || product.nutrition || {}) : 'N/A'}
       
       User Question: ${query}
       
@@ -41,7 +41,7 @@ router.post('/', async (req, res) => {
 
     res.json({ reply: text });
   } catch (error) {
-    console.error('Chat error:', error);
+    console.error('Chat error:', error.message);
     res.status(500).json({ message: 'AI failed to respond', error: error.message });
   }
 });
@@ -51,19 +51,26 @@ router.post('/diet-plan', async (req, res) => {
   const { profile } = req.body;
 
   if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ message: 'Gemini API key not configured' });
+    return res.status(500).json({ message: 'Gemini API key not configured on server' });
+  }
+
+  if (!profile) {
+    return res.status(400).json({ message: 'Profile data is required' });
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    const allergies = Array.isArray(profile.allergies) ? profile.allergies.join(', ') : (profile.allergies || 'None');
+    const conditions = Array.isArray(profile.conditions) ? profile.conditions.join(', ') : (profile.conditions || 'None');
 
     const prompt = `
       Generate a 1-day personalized diet plan based on:
-      Diet Type: ${profile.dietType}
-      Routine: ${profile.routine}
-      Allergies: ${profile.allergies.join(', ')}
-      Conditions: ${profile.conditions.join(', ')}
-      Physical Stats: ${profile.gender}, ${profile.weight}kg, ${profile.height}cm
+      Diet Type: ${profile.dietType || 'Balanced'}
+      Routine: ${profile.routine || 'Normal'}
+      Allergies: ${allergies}
+      Conditions: ${conditions}
+      Physical Stats: ${profile.gender || 'Not specified'}, ${profile.weight || 70}kg, ${profile.height || 170}cm
 
       Return JSON format ONLY: 
       {
@@ -82,8 +89,18 @@ router.post('/diet-plan', async (req, res) => {
     const cleanedJson = jsonMatch ? jsonMatch[0] : text;
     res.json(JSON.parse(cleanedJson));
   } catch (error) {
-    console.error('Diet plan error:', error);
-    res.status(500).json({ message: 'Failed to generate diet plan' });
+    console.error('Diet plan error:', error.message);
+    res.status(500).json({
+      dailyCalories: 2000,
+      proteinTarget: 50,
+      meals: [
+        { type: 'Breakfast', name: 'Oatmeal with fruits', time: '8:00 AM', calories: 350 },
+        { type: 'Lunch', name: 'Grilled chicken salad', time: '1:00 PM', calories: 500 },
+        { type: 'Snack', name: 'Mixed nuts', time: '4:00 PM', calories: 200 },
+        { type: 'Dinner', name: 'Steamed fish with vegetables', time: '7:00 PM', calories: 450 }
+      ],
+      tips: ['Server had an issue generating your plan. This is a default plan.']
+    });
   }
 });
 
@@ -92,18 +109,22 @@ router.post('/insight', async (req, res) => {
   const { product, profile } = req.body;
 
   if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ message: 'Gemini API key not configured' });
+    return res.status(500).json({ message: 'Gemini API key not configured on server' });
+  }
+
+  if (!product) {
+    return res.status(400).json({ message: 'Product data is required' });
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `
       Analyze this food product:
-      Product: ${product.name}
-      Ingredients: ${product.ingredients}
-      Nutrition (per 100g): ${JSON.stringify(product.nutrition)}
-      User Profile: ${JSON.stringify(profile)}
+      Product: ${product.name || 'Unknown Product'}
+      Ingredients: ${product.ingredients || 'Not available'}
+      Nutrition (per 100g): ${JSON.stringify(product.nutrition || {})}
+      User Profile: ${JSON.stringify(profile || {})}
       
       Return JSON format ONLY: 
       { 
@@ -132,8 +153,17 @@ router.post('/insight', async (req, res) => {
     const cleanedJson = jsonMatch ? jsonMatch[0] : text;
     res.json(JSON.parse(cleanedJson));
   } catch (error) {
-    console.error('Insight error:', error);
-    res.status(500).json({ message: 'Failed to generate insight' });
+    console.error('Insight error:', error.message);
+    res.status(500).json({
+      isSafe: true,
+      warning: 'Could not generate AI insight at this time.',
+      recommendation: 'Please try again in a moment.',
+      score: 50,
+      realityCheck: { sugarTeaspoons: 0, exerciseToBurn: { activity: 'walking', minutes: 0 } },
+      smartSwap: { productName: 'N/A', reason: 'AI temporarily unavailable' },
+      ingredientInsights: [],
+      voiceSummary: 'AI analysis temporarily unavailable.'
+    });
   }
 });
 
@@ -142,7 +172,12 @@ router.post('/location-health', async (req, res) => {
   const { city } = req.body;
 
   if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ message: 'Gemini API key not configured' });
+    return res.json({
+      heatwaveRisk: 'low',
+      waterGoalLitres: 2.5,
+      diseaseAlerts: [],
+      summary: 'Stay hydrated and eat balanced meals.'
+    });
   }
 
   if (!city) {
@@ -155,7 +190,7 @@ router.post('/location-health', async (req, res) => {
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const currentMonth = new Date().toLocaleString('en-US', { month: 'long' });
     const currentYear = new Date().getFullYear();
@@ -186,8 +221,8 @@ router.post('/location-health', async (req, res) => {
     const cleanedJson = jsonMatch ? jsonMatch[0] : text;
     res.json(JSON.parse(cleanedJson));
   } catch (error) {
-    console.error('Location health error:', error);
-    res.status(500).json({
+    console.error('Location health error:', error.message);
+    res.json({
       heatwaveRisk: 'low',
       waterGoalLitres: 2.5,
       diseaseAlerts: [],
