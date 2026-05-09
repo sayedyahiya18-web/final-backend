@@ -30,6 +30,12 @@ app.get('/api/check', (req, res) => {
   });
 });
 
+// 404 Catch-all for unhandled routes
+app.use((req, res, next) => {
+  console.log(`404 Unhandled Request: ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ message: `Route ${req.originalUrl} not found on this server.` });
+});
+
 // Global Error Handler (Express 5 compatible)
 app.use((err, req, res, next) => {
   console.error('Unhandled Error:', err);
