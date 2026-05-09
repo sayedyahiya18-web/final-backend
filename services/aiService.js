@@ -5,7 +5,7 @@ class AIService {
     this.apiKey = process.env.GEMINI_API_KEY;
     if (this.apiKey) {
       this.genAI = new GoogleGenerativeAI(this.apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     }
   }
 
@@ -14,7 +14,7 @@ class AIService {
     if (!this.apiKey) throw new Error("GEMINI_API_KEY is missing on server.");
     if (!this.genAI) {
       this.genAI = new GoogleGenerativeAI(this.apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     }
     return true;
   }
@@ -33,21 +33,35 @@ class AIService {
   async generateInsight(product, profile) {
     this.checkReady();
     const prompt = `
-      Analyze food product: ${product.name || 'Unknown'}. 
-      Ingredients: ${product.ingredients || 'N/A'}. 
-      Nutrition: ${JSON.stringify(product.nutrition || {})}.
-      User Profile: ${JSON.stringify(profile || {})}.
+      You are a clinical nutrition expert. Analyze the following food product with extreme precision.
+      Product: ${product.name || 'Unknown'}
+      Brand: ${product.brand || 'Unknown'}
+      Ingredients: ${product.ingredients || 'Not provided'}
+      Nutrition Data: ${JSON.stringify(product.nutrition || {})}
       
-      Return ONLY valid JSON:
+      User Health Profile:
+      - Allergies: ${profile.allergies?.join(', ') || 'None'}
+      - Conditions: ${profile.conditions?.join(', ') || 'None'}
+      - Diet Type: ${profile.dietType || 'Omnivore'}
+      
+      Task: Provide a critical health analysis. Be direct and scientific.
+      
+      Return ONLY a JSON object:
       {
-        "isSafe": boolean,
-        "warning": string | null,
-        "recommendation": string,
-        "score": number,
-        "realityCheck": { "sugarTeaspoons": number, "exerciseToBurn": { "activity": string, "minutes": number } },
-        "smartSwap": { "productName": string, "reason": string },
-        "ingredientInsights": [],
-        "voiceSummary": string
+        "isSafe": boolean (false if any allergy or condition conflict exists),
+        "warning": "Detailed clinical warning or null",
+        "recommendation": "Specific advice on consumption frequency",
+        "score": number (0-100, where 100 is optimal health),
+        "realityCheck": { 
+          "sugarTeaspoons": number (equivalent teaspoons of sugar), 
+          "exerciseToBurn": { "activity": "e.g., Running", "minutes": number } 
+        },
+        "smartSwap": { 
+          "productName": "A specific healthier alternative", 
+          "reason": "Scientific reason why it's better" 
+        },
+        "ingredientInsights": ["Insight 1", "Insight 2"],
+        "voiceSummary": "A professional 20-word summary for audio feedback"
       }
     `;
 
@@ -58,12 +72,17 @@ class AIService {
   async chat(query, profile, product) {
     this.checkReady();
     const prompt = `
-      Assistant for NutriScan. 
+      You are NutriScan AI, a professional health consultant.
       User Profile: ${JSON.stringify(profile || {})}.
-      Scanned Product: ${product ? (product.name || 'N/A') : 'None'}.
+      Context: ${product ? `User is asking about ${product.name}` : 'General health query'}.
+      
       Question: ${query}
       
-      Instructions: Concise, healthy advice, no emojis, markdown format.
+      Instructions: 
+      - Provide exact, scientifically backed advice.
+      - Maintain a minimalist, professional tone.
+      - Use markdown for structure.
+      - Do NOT use emojis.
     `;
 
     const result = await this.model.generateContent(prompt);
@@ -73,15 +92,23 @@ class AIService {
   async generateDietPlan(profile) {
     this.checkReady();
     const prompt = `
-      Generate 1-day diet plan.
-      Profile: ${JSON.stringify(profile || {})}.
+      Create a high-precision 1-day therapeutic diet plan.
+      User Profile: ${JSON.stringify(profile || {})}.
       
-      Return ONLY valid JSON:
+      Requirements:
+      - Align with ${profile.dietType || 'standard'} dietary requirements.
+      - Factor in ${profile.conditions?.join(' and ') || 'general wellness'}.
+      
+      Return ONLY a JSON object:
       {
         "dailyCalories": number,
         "proteinTarget": number,
-        "meals": [{ "type": string, "name": string, "time": string, "calories": number }],
-        "tips": string[]
+        "meals": [
+          { "type": "Breakfast", "name": "Exact meal name", "time": "08:00 AM", "calories": number },
+          { "type": "Lunch", "name": "Exact meal name", "time": "01:00 PM", "calories": number },
+          { "type": "Dinner", "name": "Exact meal name", "time": "07:30 PM", "calories": number }
+        ],
+        "tips": ["Clinical tip 1", "Clinical tip 2"]
       }
     `;
 
