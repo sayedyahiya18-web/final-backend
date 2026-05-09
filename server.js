@@ -15,9 +15,24 @@ app.use(express.json());
 
 // Routes with strict routing disabled for flexibility
 app.use('/api/product', productRoutes);
-app.use('/api/chat', chatRoutes);
 
-// Additional test endpoint to verify chat route reachability
+// DIRECT CHAT HANDLER (Moving out of routes to avoid Express 5 router issues)
+const aiService = require('./services/aiService');
+app.post('/api/chat', async (req, res) => {
+  console.log('--- NEW CHAT REQUEST ---');
+  console.log('Body:', JSON.stringify(req.body));
+  try {
+    const { query, profile, product } = req.body;
+    if (!query) return res.status(400).json({ message: 'No query provided' });
+    const reply = await aiService.chat(query, profile, product);
+    console.log('AI Reply sent successfully');
+    res.json({ reply });
+  } catch (error) {
+    console.error('SERVER CHAT ERROR:', error.message);
+    res.status(500).json({ message: 'AI Service Error', details: error.message });
+  }
+});
+
 app.get('/api/chat', (req, res) => {
   res.json({ message: 'Chat endpoint is reachable. Use POST to talk to AI.' });
 });
