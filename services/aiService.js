@@ -1,16 +1,26 @@
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
 class AIService {
   constructor() {
-    this.apiKey = process.env.SCRAPINGDOG_API_KEY;
+    this.geminiKey = process.env.GEMINI_API_KEY;
+    this.scrapingdogKey = process.env.SCRAPINGDOG_API_KEY;
+    
+    if (this.geminiKey) {
+      this.genAI = new GoogleGenerativeAI(this.geminiKey);
+      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    }
   }
 
-  // Helper to ensure the key is alive
+  // Helper to ensure at least one key is alive
   checkReady() {
-    if (!this.apiKey) throw new Error("SCRAPINGDOG_API_KEY is missing on server.");
+    if (!this.geminiKey && !this.scrapingdogKey) {
+      throw new Error("Missing AI API Keys (GEMINI or SCRAPINGDOG) on server.");
+    }
     return true;
   }
 
   // Extract text from Scrapingdog ChatGPT response format
-  extractText(data) {
+  extractScrapingdogText(data) {
     try {
       if (data.conversation && data.conversation.length > 0) {
         const assistantMsg = data.conversation[data.conversation.length - 1];
@@ -26,7 +36,7 @@ class AIService {
       return typeof data === 'string' ? data : JSON.stringify(data);
     } catch (e) {
       console.error("Scrapingdog Parse Error:", e);
-      return "Sorry, I couldn't process the AI response.";
+      return "Error processing Scrapingdog response.";
     }
   }
 
@@ -43,16 +53,33 @@ class AIService {
 
   async callAI(prompt) {
     this.checkReady();
-    const url = `https://api.scrapingdog.com/chatgpt?api_key=${this.apiKey}&prompt=${encodeURIComponent(prompt)}`;
     
-    const response = await fetch(url);
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Scrapingdog API Error: ${response.status} - ${err}`);
+    // Priority 1: Gemini (User requested for local/primary)
+    if (this.geminiKey) {
+      try {
+        console.log('Using Gemini AI...');
+        const result = await this.model.generateContent(prompt);
+        return result.response.text();
+      } catch (e) {
+        console.error('Gemini failed, falling back to Scrapingdog if available:', e.message);
+        if (!this.scrapingdogKey) throw e;
+      }
+    }
+
+    // Priority 2: Scrapingdog
+    if (this.scrapingdogKey) {
+      console.log('Using Scrapingdog AI...');
+      const url = `https://api.scrapingdog.com/chatgpt?api_key=${this.scrapingdogKey}&prompt=${encodeURIComponent(prompt)}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Scrapingdog API Error: ${response.status} - ${err}`);
+      }
+      const data = await response.json();
+      return this.extractScrapingdogText(data);
     }
     
-    const data = await response.json();
-    return this.extractText(data);
+    throw new Error("No available AI provider succeeded.");
   }
 
   async generateInsight(product, profile) {
