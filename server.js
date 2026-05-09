@@ -8,8 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors()); // Allow all origins
-app.options('*', cors()); // Enable pre-flight for all routes
+app.use(cors()); // Allow all origins (this automatically handles pre-flight)
 
 app.use(express.json());
 
