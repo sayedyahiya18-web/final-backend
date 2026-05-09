@@ -5,7 +5,7 @@ class AIService {
     this.apiKey = process.env.GEMINI_API_KEY;
     if (this.apiKey) {
       this.genAI = new GoogleGenerativeAI(this.apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      this.model = this.genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     }
   }
 
@@ -14,7 +14,7 @@ class AIService {
     if (!this.apiKey) throw new Error("GEMINI_API_KEY is missing on server.");
     if (!this.genAI) {
       this.genAI = new GoogleGenerativeAI(this.apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      this.model = this.genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     }
     return true;
   }
