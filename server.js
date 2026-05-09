@@ -17,18 +17,58 @@ app.use('/api/product', productRoutes);
 
 // DIRECT CHAT HANDLER (Moving out of routes to avoid Express 5 router issues)
 const aiService = require('./services/aiService');
+
+// Main Chatbot
 app.post('/api/chat', async (req, res) => {
   console.log('--- NEW CHAT REQUEST ---');
-  console.log('Body:', JSON.stringify(req.body));
   try {
     const { query, profile, product } = req.body;
     if (!query) return res.status(400).json({ message: 'No query provided' });
     const reply = await aiService.chat(query, profile, product);
-    console.log('AI Reply sent successfully');
     res.json({ reply });
   } catch (error) {
     console.error('SERVER CHAT ERROR:', error.message);
     res.status(500).json({ message: 'AI Service Error', details: error.message });
+  }
+});
+
+// Product Insights (Scanner)
+app.post('/api/chat/insight', async (req, res) => {
+  console.log('--- NEW INSIGHT REQUEST ---');
+  try {
+    const { product, profile } = req.body;
+    if (!product) return res.status(400).json({ message: 'No product data provided.' });
+    const insight = await aiService.generateInsight(product, profile);
+    res.json(insight);
+  } catch (error) {
+    console.error('SERVER INSIGHT ERROR:', error.message);
+    res.status(500).json({ message: 'AI Insight Error', details: error.message });
+  }
+});
+
+// Diet Plan Generator
+app.post('/api/chat/diet-plan', async (req, res) => {
+  console.log('--- NEW DIET PLAN REQUEST ---');
+  try {
+    const { profile } = req.body;
+    if (!profile) return res.status(400).json({ message: 'No profile data provided.' });
+    const plan = await aiService.generateDietPlan(profile);
+    res.json(plan);
+  } catch (error) {
+    console.error('SERVER DIET ERROR:', error.message);
+    res.status(500).json({ message: 'AI Diet Plan Error', details: error.message });
+  }
+});
+
+// Location Health Alerts (Added for completeness)
+app.post('/api/chat/location-health', async (req, res) => {
+  try {
+    const { city } = req.body;
+    const prompt = `Provide health alerts for ${city}. Return ONLY a JSON object: { "heatwaveRisk": "low/med/high", "waterGoalLitres": number, "diseaseAlerts": ["string"], "summary": "string" }`;
+    const text = await aiService.callAI(prompt);
+    res.json(aiService.cleanJSON(text));
+  } catch (e) {
+    res.json({ heatwaveRisk: 'low', waterGoalLitres: 2.5, diseaseAlerts: [], summary: 'Stay hydrated.' });
   }
 });
 
