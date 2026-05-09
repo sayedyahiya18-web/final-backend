@@ -46,8 +46,9 @@ app.get('/', (req, res) => {
 app.get('/api/check', (req, res) => {
   res.json({
     status: 'ok',
-    hasKey: !!process.env.GEMINI_API_KEY,
-    keyPrefix: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 8) + '...' : 'NOT SET',
+    version: 'v2-scrapingdog',
+    hasKey: !!process.env.SCRAPINGDOG_API_KEY,
+    keyPrefix: process.env.SCRAPINGDOG_API_KEY ? process.env.SCRAPINGDOG_API_KEY.substring(0, 8) + '...' : 'NOT SET',
     timestamp: Date.now()
   });
 });
@@ -66,5 +67,6 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? 'SET (' + process.env.GEMINI_API_KEY.substring(0, 8) + '...)' : 'NOT SET'}`);
+  console.log(`Version: v2-scrapingdog`);
+  console.log(`SCRAPINGDOG_API_KEY: ${process.env.SCRAPINGDOG_API_KEY ? 'SET (' + process.env.SCRAPINGDOG_API_KEY.substring(0, 8) + '...)' : 'NOT SET'}`);
 });
