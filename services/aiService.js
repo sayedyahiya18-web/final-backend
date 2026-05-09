@@ -1,25 +1,36 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
 class AIService {
   constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY;
-    if (this.apiKey) {
-      this.genAI = new GoogleGenerativeAI(this.apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    }
+    this.apiKey = process.env.SCRAPINGDOG_API_KEY;
   }
 
   // Helper to ensure the key is alive
   checkReady() {
-    if (!this.apiKey) throw new Error("GEMINI_API_KEY is missing on server.");
-    if (!this.genAI) {
-      this.genAI = new GoogleGenerativeAI(this.apiKey);
-      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    }
+    if (!this.apiKey) throw new Error("SCRAPINGDOG_API_KEY is missing on server.");
     return true;
   }
 
-  // Safe JSON extraction from AI response
+  // Extract text from Scrapingdog ChatGPT response format
+  extractText(data) {
+    try {
+      if (data.conversation && data.conversation.length > 0) {
+        const assistantMsg = data.conversation[data.conversation.length - 1];
+        if (assistantMsg.role === 'assistant' && assistantMsg.response) {
+          return assistantMsg.response.map(item => {
+            if (item.type === 'paragraph') return item.text;
+            if (item.type === 'bullet_list') return item.items.map(i => `• ${i.text}`).join('\n');
+            if (item.type === 'numbered_list') return item.items.map((i, idx) => `${idx + 1}. ${i.text}`).join('\n');
+            return '';
+          }).join('\n\n');
+        }
+      }
+      return typeof data === 'string' ? data : JSON.stringify(data);
+    } catch (e) {
+      console.error("Scrapingdog Parse Error:", e);
+      return "Sorry, I couldn't process the AI response.";
+    }
+  }
+
+  // Safe JSON extraction from text
   cleanJSON(text) {
     try {
       const match = text.match(/\{[\s\S]*\}/);
@@ -30,50 +41,47 @@ class AIService {
     }
   }
 
-  async generateInsight(product, profile) {
+  async callAI(prompt) {
     this.checkReady();
+    const url = `https://api.scrapingdog.com/chatgpt?api_key=${this.apiKey}&prompt=${encodeURIComponent(prompt)}`;
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Scrapingdog API Error: ${response.status} - ${err}`);
+    }
+    
+    const data = await response.json();
+    return this.extractText(data);
+  }
+
+  async generateInsight(product, profile) {
     const prompt = `
-      You are a clinical nutrition expert. Analyze the following food product with extreme precision.
+      You are a clinical nutrition expert. Analyze the following food product.
       Product: ${product.name || 'Unknown'}
-      Brand: ${product.brand || 'Unknown'}
       Ingredients: ${product.ingredients || 'Not provided'}
       Nutrition Data: ${JSON.stringify(product.nutrition || {})}
-      
-      User Health Profile:
-      - Allergies: ${profile.allergies?.join(', ') || 'None'}
-      - Conditions: ${profile.conditions?.join(', ') || 'None'}
-      - Diet Type: ${profile.dietType || 'Omnivore'}
-      
-      Task: Provide a critical health analysis. Be direct and scientific.
+      User Profile: ${JSON.stringify(profile || {})}
       
       Return ONLY a JSON object:
       {
-        "isSafe": boolean (false if any allergy or condition conflict exists),
-        "warning": "Detailed clinical warning or null",
-        "recommendation": "Specific advice on consumption frequency",
-        "score": number (0-100, where 100 is optimal health),
-        "realityCheck": { 
-          "sugarTeaspoons": number (equivalent teaspoons of sugar), 
-          "exerciseToBurn": { "activity": "e.g., Running", "minutes": number } 
-        },
-        "smartSwap": { 
-          "productName": "A specific healthier alternative", 
-          "reason": "Scientific reason why it's better" 
-        },
-        "ingredientInsights": ["Insight 1", "Insight 2"],
-        "voiceSummary": "A professional 20-word summary for audio feedback"
+        "isSafe": boolean,
+        "warning": "string or null",
+        "recommendation": "string",
+        "score": number,
+        "realityCheck": { "sugarTeaspoons": number, "exerciseToBurn": { "activity": "string", "minutes": number } },
+        "smartSwap": { "productName": "string", "reason": "string" },
+        "ingredientInsights": ["string"],
+        "voiceSummary": "string"
       }
     `;
 
-    const result = await this.model.generateContent(prompt);
-    return this.cleanJSON(result.response.text());
+    const text = await this.callAI(prompt);
+    return this.cleanJSON(text);
   }
 
   async chat(query, profile, product) {
-    this.checkReady();
-    
     let searchContext = "";
-    // Trigger search for specific keywords or if the query is complex
     const needsSearch = /latest|news|research|benefit|compare|new|2024|2025|price|review/i.test(query);
     
     if (needsSearch) {
@@ -86,52 +94,35 @@ class AIService {
     }
 
     const prompt = `
-      You are NutriScan AI, a professional health consultant.
-      
-      User Profile: ${JSON.stringify(profile || {})}
-      Context: ${product ? `User is asking about ${product.name}` : 'General health query'}
-      
-      ${searchContext ? `Real-time Web Search Results:\n${searchContext}\n\nNote: Incorporate the most relevant info from above into your answer.` : ''}
-      
+      You are NutriScan AI. 
+      Profile: ${JSON.stringify(profile || {})}
+      Context: ${product ? `Product ${product.name}` : 'General'}
+      ${searchContext ? `Web Info: ${searchContext}` : ''}
       Question: ${query}
-      
-      Instructions: 
-      - Provide exact, scientifically backed advice.
-      - If search results are provided, use them to be as current as possible.
-      - Maintain a minimalist, professional tone.
-      - Use markdown for structure.
-      - Do NOT use emojis.
+      Instructions: Professional, no emojis, markdown format.
     `;
 
-    const result = await this.model.generateContent(prompt);
-    return result.response.text();
+    return await this.callAI(prompt);
   }
 
   async generateDietPlan(profile) {
-    this.checkReady();
     const prompt = `
-      Create a high-precision 1-day therapeutic diet plan.
-      User Profile: ${JSON.stringify(profile || {})}.
-      
-      Requirements:
-      - Align with ${profile.dietType || 'standard'} dietary requirements.
-      - Factor in ${profile.conditions?.join(' and ') || 'general wellness'}.
-      
+      Create a 1-day therapeutic diet plan for this profile: ${JSON.stringify(profile || {})}.
       Return ONLY a JSON object:
       {
         "dailyCalories": number,
         "proteinTarget": number,
         "meals": [
-          { "type": "Breakfast", "name": "Exact meal name", "time": "08:00 AM", "calories": number },
-          { "type": "Lunch", "name": "Exact meal name", "time": "01:00 PM", "calories": number },
-          { "type": "Dinner", "name": "Exact meal name", "time": "07:30 PM", "calories": number }
+          { "type": "Breakfast", "name": "string", "time": "08:00 AM", "calories": number },
+          { "type": "Lunch", "name": "string", "time": "01:00 PM", "calories": number },
+          { "type": "Dinner", "name": "string", "time": "07:30 PM", "calories": number }
         ],
-        "tips": ["Clinical tip 1", "Clinical tip 2"]
+        "tips": ["string"]
       }
     `;
 
-    const result = await this.model.generateContent(prompt);
-    return this.cleanJSON(result.response.text());
+    const text = await this.callAI(prompt);
+    return this.cleanJSON(text);
   }
 }
 
