@@ -6,7 +6,7 @@ async function verifyKey() {
   
   try {
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const result = await model.generateContent("Test connection. Reply with 'OK'.");
     const text = result.response.text();
     console.log("Result:", text);
