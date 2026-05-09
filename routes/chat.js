@@ -83,7 +83,7 @@ router.post('/diet-plan', async (req, res) => {
     res.json(JSON.parse(cleanedJson));
   } catch (error) {
     console.error('Diet plan error:', error);
-    res.status(500).json({ message: 'Failed to generate diet plan' });
+    res.status(500).json({ message: 'Failed to generate diet plan', details: error.message });
   }
 });
 
@@ -133,7 +133,7 @@ router.post('/insight', async (req, res) => {
     res.json(JSON.parse(cleanedJson));
   } catch (error) {
     console.error('Insight error:', error);
-    res.status(500).json({ message: 'Failed to generate insight' });
+    res.status(500).json({ message: 'Failed to generate insight', details: error.message });
   }
 });
 
